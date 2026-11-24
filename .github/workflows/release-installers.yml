@@ -16,11 +16,14 @@ jobs:
           distribution: temurin
           java-version: "17"
       - name: Build macOS DMG Installer
-        run: ./gradlew desktopTest packageDmg --no-daemon
+        run: |
+          ./gradlew desktopTest packageDmg --no-daemon
+          mkdir -p release-assets
+          cp build/compose/binaries/main/dmg/*.dmg release-assets/
       - uses: actions/upload-artifact@v4
         with:
           name: SoloType-macOS-DMG
-          path: build/compose/binaries/main/dmg/*.dmg
+          path: release-assets/*
 
   build-windows:
     runs-on: windows-latest
@@ -32,12 +35,16 @@ jobs:
           java-version: "17"
       - name: Build Windows Setup Wizard (.exe & .msi)
         run: .\gradlew.bat desktopTest packageExe packageMsi --no-daemon
+      - name: Prepare flat Windows release assets
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          cp build/compose/binaries/main/exe/*.exe release-assets/
+          cp build/compose/binaries/main/msi/*.msi release-assets/
       - uses: actions/upload-artifact@v4
         with:
           name: SoloType-Windows-Setup
-          path: |
-            build/compose/binaries/main/exe/*.exe
-            build/compose/binaries/main/msi/*.msi
+          path: release-assets/*
 
   build-linux:
     runs-on: ubuntu-latest
@@ -50,18 +57,18 @@ jobs:
       - name: Build Linux .deb and Portable Bundle
         run: |
           ./gradlew desktopTest packageDeb createDistributable --no-daemon
-          mkdir -p linux-bundle
+          mkdir -p linux-bundle release-assets
           cp build/compose/binaries/main/deb/*.deb linux-bundle/
           cp -r build/compose/binaries/main/app/SoloType linux-bundle/
           cp packaging/linux/install.sh packaging/linux/uninstall.sh linux-bundle/
           chmod +x linux-bundle/install.sh linux-bundle/uninstall.sh
           tar -czf SoloType-Linux-x64.tar.gz -C linux-bundle .
+          cp build/compose/binaries/main/deb/*.deb release-assets/
+          cp SoloType-Linux-x64.tar.gz release-assets/
       - uses: actions/upload-artifact@v4
         with:
           name: SoloType-Linux
-          path: |
-            build/compose/binaries/main/deb/*.deb
-            SoloType-Linux-x64.tar.gz
+          path: release-assets/*
 
   release:
     needs: [build-macos, build-windows, build-linux]
@@ -74,6 +81,11 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      - name: Flatten release assets
+        run: |
+          mkdir -p release-files
+          find artifacts -type f -exec cp {} release-files/ \;
+          ls -lh release-files/
       - uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*
+          files: release-files/*
